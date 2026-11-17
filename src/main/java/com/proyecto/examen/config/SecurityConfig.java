@@ -15,7 +15,7 @@ public class SecurityConfig {
             .authorizeRequests()
             .anyRequest().authenticated()
             .and()
-            .formLogin().defaultSuccessUrl("/swagger-ui/index.html", true)
+            .formLogin().defaultSuccessUrl("/index.html", true)
             .and()
             .httpBasic();
 

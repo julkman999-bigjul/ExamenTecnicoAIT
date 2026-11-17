@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel de Control</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+        h1, h2 { color: #38bdf8; margin-top: 0; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+        .card { background: #1e293b; padding: 18px; border-radius: 10px; border: 1px solid #334155; }
+        input, select, button { width: 100%; padding: 8px 10px; margin: 6px 0 12px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; box-sizing: border-box; }
+        button { background: #0284c7; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #0369a1; }
+        button.sec { background: #475569; width: auto; padding: 6px 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+        th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; }
+        th { color: #94a3b8; }
+        .msg { padding: 10px; border-radius: 6px; margin-bottom: 15px; display: none; font-weight: bold; }
+        .ok { background: #065f46; color: #a7f3d0; display: block; }
+        .err { background: #7f1d1d; color: #fecaca; display: block; }
+        a { color: #38bdf8; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <h1>Gestión de Órdenes y Conductores</h1>
+    <div>
+        <a href="/swagger-ui/index.html" target="_blank">SWAGGER</a>
+    </div>
+</div>
+
+<div id="alert" class="msg"></div>
+
+<div class="grid">
+
+    <div class="card">
+        <h2>Conductores</h2>
+        <input id="driverName" placeholder="Nombre del conductor">
+        <input id="driverLicense" placeholder="Número de licencia">
+        <button onclick="createDriver()">Crear Conductor</button>
+        <table>
+            <thead><tr><th>Nombre</th><th>Licencia</th><th>ID</th></tr></thead>
+            <tbody id="driversTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Nueva Orden</h2>
+        <input id="orderOrigin" placeholder="Origen (ej. CDMX)">
+        <input id="orderDest" placeholder="Destino (ej. Guadalajara)">
+        <button onclick="createOrder()">Crear Orden</button>
+
+        <h2>Cambiar Estado</h2>
+        <input id="statusOrderId" placeholder="UUID de la Orden">
+        <select id="newStatus">
+            <option value="IN_TRANSIT">IN_TRANSIT</option>
+            <option value="DELIVERED">DELIVERED</option>
+            <option value="CANCELLED">CANCELLED</option>
+        </select>
+        <button onclick="updateStatus()">Actualizar Estado</button>
+    </div>
+
+    <div class="card">
+        <h2>Asignar y Subir Archivos</h2>
+        <input id="assignOrderId" placeholder="UUID de la Orden (CREATED)">
+        <input id="assignDriverId" placeholder="UUID del Conductor Activo">
+        
+        <label>Adjuntar PDF (.pdf):</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+
+        <label>Adjuntar Imagen (.png, .jpg):</label>
+        <input type="file" id="imgFile" accept=".png,.jpg,.jpeg">
+
+        <button onclick="createAssignment()">Asignar Conductor y Archivos</button>
+    </div>
+
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <h2>📋 Listado de Órdenes (con filtros)</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+        <select id="fStatus">
+            <option value="">Todos los estados</option>
+            <option value="CREATED">CREATED</option>
+            <option value="IN_TRANSIT">IN_TRANSIT</option>
+            <option value="DELIVERED">DELIVERED</option>
+            <option value="CANCELLED">CANCELLED</option>
+        </select>
+        <input type="date" id="fDate">
+        <input id="fOrigin" placeholder="Filtrar por origen">
+        <input id="fDest" placeholder="Filtrar por destino">
+        <button onclick="loadOrders()">🔍 Buscar / Filtrar</button>
+    </div>
+    <table>
+        <thead><tr><th>ID (clic para copiar)</th><th>Estado</th><th>Origen</th><th>Destino</th><th>Creada</th></tr></thead>
+        <tbody id="ordersTable"></tbody>
+    </table>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <h2>Órdenes Asignadas</h2>
+    <button class="sec" onclick="loadAssignments()">🔄 Actualizar Asignaciones</button>
+    <table>
+        <thead>
+            <tr>
+                <th>ID Asignación</th>
+                <th>ID Orden</th>
+                <th>ID Conductor</th>
+                <th>Archivo PDF</th>
+                <th>Imagen</th>
+            </tr>
+        </thead>
+        <tbody id="assignmentsTable"></tbody>
+    </table>
+</div>
+
+
+<script>
+    function showMsg(text, isError = false) {
+        const el = document.getElementById('alert');
+        el.textContent = text;
+        el.className = 'msg ' + (isError ? 'err' : 'ok');
+    }
+
+    async function handleRes(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || 'Error en la petición (' + res.status + ')');
+        return data;
+    }
+
+    async function createDriver() {
+        try {
+            const data = await handleRes(await fetch('/api/drivers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('driverName').value,
+                    licenseNumber: document.getElementById('driverLicense').value
+                })
+            }));
+            showMsg('Conductor creado: ' + data.name);
+            loadDrivers();
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    async function loadDrivers() {
+        try {
+            const list = await handleRes(await fetch('/api/drivers'));
+            document.getElementById('driversTable').innerHTML = list.map(d =>
+                `<tr><td>${d.name}</td><td>${d.licenseNumber}</td><td style="font-size:11px">${d.id}</td></tr>`
+            ).join('');
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    async function createOrder() {
+        try {
+            const data = await handleRes(await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    origin: document.getElementById('orderOrigin').value,
+                    destination: document.getElementById('orderDest').value
+                })
+            }));
+            showMsg('Orden creada origen:' + data.origin + ' Destino: ' +data.origin);
+            loadOrders();
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    async function updateStatus() {
+        const id = document.getElementById('statusOrderId').value.trim();
+        try {
+            const data = await handleRes(await fetch(`/api/orders/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: document.getElementById('newStatus').value })
+            }));
+            showMsg('Estado actualizado a: ' + data.status);
+            loadOrders();
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    async function loadOrders() {
+        const params = new URLSearchParams();
+        const st = document.getElementById('fStatus').value;
+        const dt = document.getElementById('fDate').value;
+        const or = document.getElementById('fOrigin').value;
+        const de = document.getElementById('fDest').value;
+        if (st) params.append('status', st);
+        if (dt) params.append('date', dt);
+        if (or) params.append('origin', or);
+        if (de) params.append('destination', de);
+
+        try {
+            const list = await handleRes(await fetch('/api/orders?' + params.toString()));
+            document.getElementById('ordersTable').innerHTML = list.map(o =>
+                `<tr><td style="font-size:11px">${o.id}</td><td><b>${o.status}</b></td><td>${o.origin}</td><td>${o.destination}</td><td>${o.createdAt}</td></tr>`
+            ).join('');
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+        async function createAssignment() {
+        const orderId = document.getElementById('assignOrderId').value.trim();
+        const driverId = document.getElementById('assignDriverId').value.trim();
+        const pdfInput = document.getElementById('pdfFile');
+        const imgInput = document.getElementById('imgFile');
+
+        if (!orderId || !driverId) {
+            return showMsg('Debes ingresar el UUID de la Orden y del Conductor', true);
+        }
+
+        const formData = new FormData();
+        formData.append('orderId', orderId);
+        formData.append('driverId', driverId);
+        if (pdfInput.files.length > 0) formData.append('pdf', pdfInput.files[0]);
+        if (imgInput.files.length > 0) formData.append('image', imgInput.files[0]);
+
+        try {
+            const data = await handleRes(await fetch('/api/assignments', {
+                method: 'POST',
+                body: formData
+            }));
+            showMsg('Asignación creada con ID: ' + data.id);
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    async function loadAssignments() {
+        try {
+            const list = await handleRes(await fetch('/api/assignments'));
+            document.getElementById('assignmentsTable').innerHTML = list.map(a =>
+                `<tr>
+                    <td style="font-size:11px">${a.id}</td>
+                    <td style="font-size:11px">${a.orderId}</td>
+                    <td style="font-size:11px">${a.driverId}</td>
+                    <td>${a.pdf || 'Sin PDF'}</td>
+                    <td>${a.image || 'Sin imagen'}</td>
+                </tr>`
+            ).join('');
+        } catch (e) { showMsg(e.message, true); }
+    }
+
+    loadDrivers();
+    loadOrders();
+</script>
+</body>
+</html>
