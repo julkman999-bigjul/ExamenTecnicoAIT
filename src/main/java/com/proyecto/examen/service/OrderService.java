@@ -5,6 +5,8 @@ import com.proyecto.examen.dto.UpdateStatus;
 import com.proyecto.examen.model.Order;
 import com.proyecto.examen.model.OrderStatus;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
 
     private final JdbcTemplate jdbcTemplate;
@@ -34,7 +37,6 @@ public class OrderService {
             .updatedAt(rs.getTimestamp("updatedAt").toLocalDateTime())
             .build();
 
-    // 1. Crear una nueva orden
     public Order createOrder(CreateOrder dto) {
         LocalDateTime now = LocalDateTime.now();
         Order order = Order.builder()
@@ -58,11 +60,9 @@ public class OrderService {
                 Timestamp.valueOf(order.getCreatedAt()),
                 Timestamp.valueOf(order.getUpdatedAt())
         );
-
+        log.info("Orden creada con ID: {} | Origen: {} -> Destino: {}", order.getId(), order.getOrigin(), order.getDestination());
         return order;
     }
-
-    // 2. Consultar orden por ID
     public Order getOrderById(UUID id) {
         String sql = "SELECT id, status, origin, destination, createdAt, updatedAt FROM \"order\" WHERE id = ?";
         try {
@@ -72,7 +72,6 @@ public class OrderService {
         }
     }
 
-    // 3. Cambiar el estado de la orden (validando flujo válido)
     public Order updateOrderStatus(UUID id, UpdateStatus dto) {
         Order currentOrder = getOrderById(id);
         OrderStatus actualStatus = currentOrder.getStatus();
@@ -91,10 +90,10 @@ public class OrderService {
 
         currentOrder.setStatus(nuevoStatus);
         currentOrder.setUpdatedAt(now);
+        log.info("Estado de orden {} actualizado de {} a {}", id, actualStatus, nuevoStatus);
         return currentOrder;
     }
 
-    // 4. Listar órdenes con filtros opcionales (status, fecha, origen o destino)
     public List<Order> listOrders(OrderStatus status, LocalDate date, String origin, String destination) {
         StringBuilder sql = new StringBuilder(
                 "SELECT id, status, origin, destination, createdAt, updatedAt FROM \"order\" WHERE 1=1"
@@ -123,7 +122,6 @@ public class OrderService {
         return jdbcTemplate.query(sql.toString(), orderRowMapper, params.toArray());
     }
 
-    // Reglas de transición válida de estados
     private boolean isValidTransition(OrderStatus current, OrderStatus next) {
         switch (current) {
             case CREATED:

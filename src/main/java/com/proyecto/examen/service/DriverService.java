@@ -3,6 +3,8 @@ package com.proyecto.examen.service;
 import com.proyecto.examen.dto.CreateDriver;
 import com.proyecto.examen.model.Driver;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,6 +17,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DriverService {
 
     private final JdbcTemplate jdbcTemplate;
@@ -44,6 +47,7 @@ public class DriverService {
                     driver.getLicenseNumber(),
                     driver.isActive()
             );
+            log.info("Conductor registrado con ID: {} | Nombre: {} | Licencia: {}", driver.getId(), driver.getName(), driver.getLicenseNumber());
             return driver;
         } catch (DuplicateKeyException e) {
             throw new ResponseStatusException(

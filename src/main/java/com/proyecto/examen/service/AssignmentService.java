@@ -5,6 +5,8 @@ import com.proyecto.examen.model.Assignment;
 import com.proyecto.examen.model.Order;
 import com.proyecto.examen.model.OrderStatus;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -21,13 +23,14 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AssignmentService {
 
     private final JdbcTemplate jdbcTemplate;
     private final OrderService orderService;
 
     public Assignment assignDriver(UUID orderId, UUID driverId, MultipartFile pdf, MultipartFile image) {
-        // 1. Verificar que el conductor exista y esté activo
+
         Boolean isActive;
         try {
             isActive = jdbcTemplate.queryForObject(
@@ -63,7 +66,7 @@ public class AssignmentService {
             pdfPath = saveFileToDisk(pdf, assignmentId + "_" + pdfName);
         }
 
-        // 4. Validar y guardar Imagen si viene adjunta
+
         if (image != null && !image.isEmpty()) {
             String imgName = image.getOriginalFilename();
             String lowerName = imgName != null ? imgName.toLowerCase() : "";
@@ -92,6 +95,7 @@ public class AssignmentService {
                     assignment.getPdf(),
                     assignment.getImage()
             );
+            log.info("Asignación {} creada: Orden {} asignada al conductor {}", assignment.getId(), orderId, driverId);
             return assignment;
         } catch (DuplicateKeyException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta orden ya tiene un conductor asignado");
